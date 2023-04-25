@@ -1,0 +1,15 @@
+
+//Acara - Simple Java Event System
+
+//Copyright (c) 2020-2023 Keksuccino.
+//Acara is licensed under MIT.
+
+package de.keksuccino.acara;
+
+public enum EventPriority {
+	HIGHEST,
+	HIGH,
+	NORMAL,
+	LOW,
+	LOWEST
+}
