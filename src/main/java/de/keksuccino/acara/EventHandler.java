@@ -8,7 +8,6 @@ package de.keksuccino.acara;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jetbrains.annotations.NotNull;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -107,7 +106,6 @@ public class EventHandler {
 		}
 	}
 
-	@NotNull
 	protected List<EventMethod> getEventMethodsOfClass(Class<?> c) {
 		List<EventMethod> l = new ArrayList<>();
 		try {
@@ -125,7 +123,6 @@ public class EventHandler {
 		return l;
 	}
 
-	@NotNull
 	protected List<EventMethod> getEventMethodsOfObject(Object object) {
 		List<EventMethod> l = new ArrayList<>();
 		try {
