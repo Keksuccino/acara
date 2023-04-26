@@ -12,6 +12,6 @@ import java.lang.annotation.RetentionPolicy;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface SubscribeEvent {
 	
-	EventPriority priority() default EventPriority.NORMAL;
+	int priority() default EventPriority.NORMAL;
 	
 }

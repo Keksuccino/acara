@@ -12,10 +12,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Consumer;
 
 /**
@@ -40,42 +37,17 @@ public class EventHandler {
 	 * </pre>
 	 */
 	public void postEvent(EventBase event) {
-		if (eventsExistForType(event.getClass())) {
-			List<ListenerContainer> highest = new ArrayList<>();
-			List<ListenerContainer> high = new ArrayList<>();
-			List<ListenerContainer> normal = new ArrayList<>();
-			List<ListenerContainer> low = new ArrayList<>();
-			List<ListenerContainer> lowest = new ArrayList<>();
-			for (ListenerContainer c : events.get(event.getClass().getName())) {
-				if (c.priority == EventPriority.HIGHEST) {
-					highest.add(c);
+		if (eventsRegisteredForType(event.getClass())) {
+			List<ListenerContainer> l = new ArrayList<>(events.get(event.getClass().getName()));
+			l.sort((o1, o2) -> {
+				if (o1.priority < o2.priority) {
+					return -1;
+				} else if (o1.priority > o2.priority) {
+					return 1;
 				}
-				if (c.priority == EventPriority.HIGH) {
-					high.add(c);
-				}
-				if (c.priority == EventPriority.NORMAL) {
-					normal.add(c);
-				}
-				if (c.priority == EventPriority.LOW) {
-					low.add(c);
-				}
-				if (c.priority == EventPriority.LOWEST) {
-					lowest.add(c);
-				}
-			}
-			for (ListenerContainer c : highest) {
-				c.noticeListener(event);
-			}
-			for (ListenerContainer c : high) {
-				c.noticeListener(event);
-			}
-			for (ListenerContainer c : normal) {
-				c.noticeListener(event);
-			}
-			for (ListenerContainer c : low) {
-				c.noticeListener(event);
-			}
-			for (ListenerContainer c : lowest) {
+				return 0;
+			});
+			for (ListenerContainer c : l) {
 				c.noticeListener(event);
 			}
 		}
@@ -125,6 +97,12 @@ public class EventHandler {
 				}
 			};
 			ListenerContainer container = new ListenerContainer(m.eventType.getName(), listener, m.priority);
+			if (m.parentClassName != null) {
+				container.listenerParentClassName = m.parentClassName;
+			}
+			if (m.methodName != null) {
+				container.listenerMethodName = m.methodName;
+			}
 			this.registerListener(container);
 		}
 	}
@@ -137,7 +115,7 @@ public class EventHandler {
 				for (Method m : c.getMethods()) {
 					if (Modifier.isPublic(m.getModifiers()) && Modifier.isStatic(m.getModifiers()) && this.isEventMethod(m)) {
 						Class<? extends EventBase> eventClass = (Class<? extends EventBase>) m.getParameterTypes()[0];
-						l.add(new EventMethod(m, c, eventClass, true));
+						l.add(new EventMethod(m, c, eventClass, true, c.getName(), m.getName()));
 					}
 				}
 			}
@@ -156,7 +134,7 @@ public class EventHandler {
 				for (Method m : c.getMethods()) {
 					if (Modifier.isPublic(m.getModifiers()) && this.isEventMethod(m)) {
 						Class<? extends EventBase> eventClass = (Class<? extends EventBase>) m.getParameterTypes()[0];
-						l.add(new EventMethod(m, object, eventClass, Modifier.isStatic(m.getModifiers())));
+						l.add(new EventMethod(m, object, eventClass, Modifier.isStatic(m.getModifiers()), c.getName(), m.getName()));
 					}
 				}
 			}
@@ -167,16 +145,16 @@ public class EventHandler {
 	}
 
 	public void registerListener(Consumer<EventBase> listener, Class<? extends EventBase> eventClass) {
-		this.registerListener(listener, eventClass, EventPriority.NORMAL);
+		this.registerListener(listener, eventClass, 0);
 	}
 
-	public void registerListener(Consumer<EventBase> listener, Class<? extends EventBase> eventClass, EventPriority priority) {
+	public void registerListener(Consumer<EventBase> listener, Class<? extends EventBase> eventClass, int priority) {
 		this.registerListener(new ListenerContainer(eventClass.getName(), listener, priority));
 	}
 
 	protected void registerListener(ListenerContainer listenerContainer) {
 		try {
-			if (!eventsExistForIdentifier(listenerContainer.eventIdentifier)) {
+			if (!eventsRegisteredForIdentifier(listenerContainer.eventIdentifier)) {
 				events.put(listenerContainer.eventIdentifier, new ArrayList<>());
 			}
 			events.get(listenerContainer.eventIdentifier).add(listenerContainer);
@@ -204,45 +182,29 @@ public class EventHandler {
 		return false;
 	}
 	
-	public boolean eventsExistForType(Class<? extends EventBase> listenerType) {
+	public boolean eventsRegisteredForType(Class<? extends EventBase> listenerType) {
 		if (listenerType == null) {
 			return false;
 		}
-		return this.eventsExistForIdentifier(listenerType.getName());
+		return this.eventsRegisteredForIdentifier(listenerType.getName());
 	}
 
-	public boolean eventsExistForIdentifier(String identifier) {
+	public boolean eventsRegisteredForIdentifier(String identifier) {
 		if (identifier == null) {
 			return false;
 		}
 		return (events.get(identifier) != null);
 	}
 
-	/** Deprecated! Use {@link EventHandler#postEvent(EventBase)} instead! **/
-	@Deprecated
-	public void callEventsFor(EventBase event) {
-		this.postEvent(event);
-	}
-
-	/** Deprecated! Use {@link EventHandler#registerListenersOf(Object)} instead! **/
-	@Deprecated
-	public void registerEventsFrom(Object object) {
-		this.registerListenersOf(object);
-	}
-
-	/** Deprecated! Use {@link EventHandler#registerListenersOf(Class)} instead! **/
-	@Deprecated
-	public void registerEventsFrom(Class<?> c) {
-		this.registerListenersOf(c);
-	}
-
 	public static class ListenerContainer {
 
 		public final Consumer<EventBase> listener;
 		public final String eventIdentifier;
-		public final EventPriority priority;
+		public final int priority;
+		public String listenerParentClassName = "[unknown]";
+		public String listenerMethodName = "[unknown]";
 
-		public ListenerContainer(String eventIdentifier, Consumer<EventBase> listener, EventPriority priority) {
+		public ListenerContainer(String eventIdentifier, Consumer<EventBase> listener, int priority) {
 			this.listener = listener;
 			this.eventIdentifier = eventIdentifier;
 			this.priority = priority;
@@ -255,6 +217,8 @@ public class EventHandler {
 				LOGGER.error("##################################");
 				LOGGER.error("[ACARA] Failed to notify event listener!");
 				LOGGER.error("[ACARA] Event Name: " + this.eventIdentifier);
+				LOGGER.error("[ACARA] Listener Parent Class Name: " + this.listenerParentClassName);
+				LOGGER.error("[ACARA] Listener Method Name In Parent Class: " + this.listenerMethodName);
 				LOGGER.error("##################################");
 				e.printStackTrace();
 			}
@@ -266,16 +230,20 @@ public class EventHandler {
 
 		public final Method method;
 		public final Object parent;
-		public final EventPriority priority;
+		public final int priority;
 		public final Class<? extends EventBase> eventType;
 		public final boolean isStatic;
+		public final String parentClassName;
+		public final String methodName;
 
-		public EventMethod(Method method, Object parent, Class<? extends EventBase> eventType, boolean isStatic) {
+		protected EventMethod(Method method, Object parent, Class<? extends EventBase> eventType, boolean isStatic, String parentClassName, String methodName) {
 			this.method = method;
 			this.parent = parent;
 			this.eventType = eventType;
 			this.priority = method.getAnnotation(SubscribeEvent.class).priority();
 			this.isStatic = isStatic;
+			this.parentClassName = parentClassName;
+			this.methodName = methodName;
 		}
 
 	}
