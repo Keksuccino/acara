@@ -11,7 +11,12 @@ import java.lang.annotation.RetentionPolicy;
 
 @Retention(RetentionPolicy.RUNTIME)
 public @interface SubscribeEvent {
-	
+
+	/**
+	 * The priority of the event listener.<br>
+	 * The listener with the highest priority gets notified first.<br>
+	 * Priorities get handled per event type.
+	 **/
 	int priority() default EventPriority.NORMAL;
 	
 }

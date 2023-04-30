@@ -9,6 +9,7 @@ package de.keksuccino.acara;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.*;
@@ -22,6 +23,8 @@ import java.util.function.Consumer;
 public class EventHandler {
 
 	private static final Logger LOGGER = LogManager.getLogger();
+	/** Default instance. It is recommended to create a new instance for every project. **/
+	public static final EventHandler INSTANCE = new EventHandler();
 
 	private final Map<String, List<ListenerContainer>> events = new HashMap<>();
 
@@ -66,11 +69,11 @@ public class EventHandler {
 	 * </pre>
 	 **/
 	public void registerListenersOf(Class<?> clazz) {
-		this.registerListenerMethods(this.getEventMethodsOfClass(clazz));
+		this.registerListenerMethods(this.getEventMethodsOf(clazz));
 	}
 
 	/**
-	 * This will register all public (static and non-static) event listener methods of the given object annotated with {@link SubscribeEvent}.<br>
+	 * This will register all public non-static event listener methods of the given object annotated with {@link SubscribeEvent}.<br>
 	 * Event listener methods need to have only ONE parameter and this parameter has to be the event type (subclass of {@link EventBase}).<br><br>
 	 *
 	 * <b>Example of a valid event listener method:</b>
@@ -83,55 +86,39 @@ public class EventHandler {
 	 * </pre>
 	 **/
 	public void registerListenersOf(Object object) {
-		this.registerListenerMethods(this.getEventMethodsOfObject(object));
+		this.registerListenerMethods(this.getEventMethodsOf(object));
 	}
 
 	protected void registerListenerMethods(List<EventMethod> methods) {
 		for (EventMethod m : methods) {
 			Consumer<EventBase> listener = (event) -> {
 				try {
-					m.method.invoke(m.parent, event);
+					m.method.invoke(m.parentObject, event);
 				} catch (Exception e) {
 					throw new RuntimeException(e);
 				}
 			};
 			ListenerContainer container = new ListenerContainer(m.eventType.getName(), listener, m.priority);
-			if (m.parentClassName != null) {
-				container.listenerParentClassName = m.parentClassName;
-			}
-			if (m.methodName != null) {
-				container.listenerMethodName = m.methodName;
-			}
+			container.listenerParentClassName = m.parentClass.getName();
+			container.listenerMethodName = m.method.getName();
 			this.registerListener(container);
 		}
 	}
 
-	protected List<EventMethod> getEventMethodsOfClass(Class<?> c) {
+	protected List<EventMethod> getEventMethodsOf(Object objectOrClass) {
 		List<EventMethod> l = new ArrayList<>();
 		try {
-			if (c != null) {
+			if (objectOrClass != null) {
+				boolean isClass = (objectOrClass instanceof Class<?>);
+				Class<?> c = isClass ? (Class<?>) objectOrClass : objectOrClass.getClass();
 				for (Method m : c.getMethods()) {
-					if (Modifier.isPublic(m.getModifiers()) && Modifier.isStatic(m.getModifiers()) && this.isEventMethod(m)) {
-						Class<? extends EventBase> eventClass = (Class<? extends EventBase>) m.getParameterTypes()[0];
-						l.add(new EventMethod(m, c, eventClass, true, c.getName(), m.getName()));
+					if (isClass && Modifier.isStatic(m.getModifiers())) {
+						EventMethod em = EventMethod.tryCreateFrom(new AnalyzedMethod(m, c));
+						if (em != null) l.add(em);
 					}
-				}
-			}
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-		return l;
-	}
-
-	protected List<EventMethod> getEventMethodsOfObject(Object object) {
-		List<EventMethod> l = new ArrayList<>();
-		try {
-			if (object != null) {
-				Class<?> c = object.getClass();
-				for (Method m : c.getMethods()) {
-					if (Modifier.isPublic(m.getModifiers()) && this.isEventMethod(m)) {
-						Class<? extends EventBase> eventClass = (Class<? extends EventBase>) m.getParameterTypes()[0];
-						l.add(new EventMethod(m, object, eventClass, Modifier.isStatic(m.getModifiers()), c.getName(), m.getName()));
+					if (!isClass && !Modifier.isStatic(m.getModifiers())) {
+						EventMethod em = EventMethod.tryCreateFrom(new AnalyzedMethod(m, objectOrClass));
+						if (em != null) l.add(em);
 					}
 				}
 			}
@@ -160,25 +147,6 @@ public class EventHandler {
 		}
 	}
 
-	protected boolean isEventMethod(Method m) {
-		if (m != null) {
-			try {
-				return (m.isAnnotationPresent(SubscribeEvent.class) && this.hasEventMethodHeader(m));
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-		}
-		return false;
-	}
-
-	protected boolean hasEventMethodHeader(Method m) {
-		if (m != null) {
-			Class<?>[] paramTypes = m.getParameterTypes();
-			return ((paramTypes.length == 1) && EventBase.class.isAssignableFrom(paramTypes[0]));
-		}
-		return false;
-	}
-	
 	public boolean eventsRegisteredForType(Class<? extends EventBase> listenerType) {
 		if (listenerType == null) {
 			return false;
@@ -223,24 +191,109 @@ public class EventHandler {
 
 	}
 
-	protected static class EventMethod {
+	protected static class AnalyzedMethod {
 
-		public final Method method;
-		public final Object parent;
-		public final int priority;
-		public final Class<? extends EventBase> eventType;
-		public final boolean isStatic;
-		public final String parentClassName;
-		public final String methodName;
+		/** The actual method. **/
+		public Method method;
+		/** The object this method is part of. It's possible that this is the parent class. **/
+		public Object parentObject;
+		/** The class this method is part of. **/
+		public Class<?> parentClass;
+		/** If the method is static. **/
+		public boolean isStatic;
+		/** All annotations of the method. This includes annotations of methods in superclasses. **/
+		public List<Annotation> annotations = new ArrayList<>();
 
-		protected EventMethod(Method method, Object parent, Class<? extends EventBase> eventType, boolean isStatic, String parentClassName, String methodName) {
+		protected AnalyzedMethod() {
+		}
+
+		protected AnalyzedMethod(Method method, Object parentObjectOrClass) {
 			this.method = method;
-			this.parent = parent;
-			this.eventType = eventType;
-			this.priority = method.getAnnotation(SubscribeEvent.class).priority();
-			this.isStatic = isStatic;
-			this.parentClassName = parentClassName;
-			this.methodName = methodName;
+			this.parentObject = parentObjectOrClass;
+			this.parentClass = this.tryGetParentClass();
+			this.isStatic = Modifier.isStatic(method.getModifiers());
+			collectMethodAnnotations(this.isStatic ? null : this.parentObject.getClass(), this.method, this.annotations);
+		}
+
+		protected Class<?> tryGetParentClass() {
+			if (this.parentObject instanceof Class<?>) {
+				return (Class<?>) this.parentObject;
+			}
+			return this.parentObject.getClass();
+		}
+
+		protected static void collectMethodAnnotations(Class<?> c, Method m, List<Annotation> addToList) {
+			try {
+				addToList.addAll(Arrays.asList(m.getAnnotations()));
+				if (!Modifier.isStatic(m.getModifiers()) && (c != null)) {
+					Class<?> sc = c.getSuperclass();
+					if (sc != null) {
+						try {
+							Method sm = sc.getMethod(m.getName(), m.getParameterTypes());
+							collectMethodAnnotations(sc, sm, addToList);
+						} catch (Exception ignored) {}
+					}
+				}
+			} catch (Exception ignored) {}
+		}
+
+	}
+
+	protected static class EventMethod extends AnalyzedMethod {
+
+		/** The event priority. **/
+		public final int priority;
+		/** The event type. **/
+		public final Class<? extends EventBase> eventType;
+
+		/** Will return the created EventMethod instance or NULL if the AnalyzedMethod was not a valid event method. **/
+		protected static EventMethod tryCreateFrom(AnalyzedMethod method) {
+			EventMethod em = new EventMethod(method);
+			return (em.eventType != null) ? em : null;
+		}
+
+		protected EventMethod(AnalyzedMethod method) {
+
+			super();
+			this.method = method.method;
+			this.parentObject = method.parentObject;
+			this.parentClass = method.parentClass;
+			this.isStatic = method.isStatic;
+			this.annotations = method.annotations;
+
+			this.priority = this.tryGetPriority();
+			this.eventType = this.tryGetEventType();
+
+		}
+
+		protected Class<? extends EventBase> tryGetEventType() {
+			try {
+				if (this.method != null) {
+					Class<?>[] params = this.method.getParameterTypes();
+					if (params.length > 0) {
+						Class<?> firstParam = params[0];
+						if (EventBase.class.isAssignableFrom(firstParam)) {
+							return (Class<? extends EventBase>) firstParam;
+						}
+					}
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			return null;
+		}
+
+		protected int tryGetPriority() {
+			try {
+				for (Annotation a : this.annotations) {
+					if (a instanceof SubscribeEvent) {
+						return ((SubscribeEvent) a).priority();
+					}
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			return 0;
 		}
 
 	}
