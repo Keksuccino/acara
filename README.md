@@ -7,7 +7,7 @@ Acara is really easy to use and pretty much self-explanatory.
 ```java
 public class Acara {
 
-    //Every project should have its own EventHandler instance
+    //Every project should have its own EventHandler instances
     public static final EventHandler EVENT_HANDLER = new EventHandler();
     
     public static void main(String[] args) {
