@@ -30,16 +30,16 @@ public class Acara {
 
     //This is a NON-STATIC event listener method.
     //Registering this listener to the handler will make it listen for the event type it has as parameter.
-    //Listener methods need to have the @SubscribeEvent annotation and need to have exactly one parameter, which is the event type it listens to.
+    //Listener methods need to have the @EventListener annotation and need to have exactly one parameter, which is the event type it listens to.
     //When an event of the ExampleEvent type gets posted to the handler, this listener gets notified/invoked.
-    @SubscribeEvent
+    @EventListener
     public void someEventListener(ExampleEvent event) {
         System.out.println(event.someString);
     }
 
     //This is a STATIC event listener method.
     //In this example, a priority was specified for the listener. The listener with the highest priority (per event type) gets notified/invoked first.
-    @SubscribeEvent(priority = 2)
+    @EventListener(priority = 2)
     public static void someStaticEventListener(ExampleEvent event) {
         System.out.println(event.someString);
     }
