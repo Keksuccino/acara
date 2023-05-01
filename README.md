@@ -1,6 +1,8 @@
 # About
 Acara is a simple and lightweight event system for Java.
 
+It was mainly created for [FancyMenu](https://github.com/Keksuccino/FancyMenu), because I needed a platform-independent event system, but there's no reason to not use it in other (non-Minecraft) projects.
+
 # Usage
 Acara is really easy to use and pretty much self-explanatory.
 
