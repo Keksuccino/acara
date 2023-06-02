@@ -117,11 +117,11 @@ public class EventHandler {
 				for (Method m : c.getMethods()) {
 					if (isClass && Modifier.isStatic(m.getModifiers())) {
 						EventMethod em = EventMethod.tryCreateFrom(new AnalyzedMethod(m, c));
-						if (em != null) l.add(em);
+						if ((em != null) && this.hasEventListenerAnnotation(em)) l.add(em);
 					}
 					if (!isClass && !Modifier.isStatic(m.getModifiers())) {
 						EventMethod em = EventMethod.tryCreateFrom(new AnalyzedMethod(m, objectOrClass));
-						if (em != null) l.add(em);
+						if ((em != null) && this.hasEventListenerAnnotation(em)) l.add(em);
 					}
 				}
 			}
@@ -129,6 +129,13 @@ public class EventHandler {
 			e.printStackTrace();
 		}
 		return l;
+	}
+
+	protected boolean hasEventListenerAnnotation(EventMethod m) {
+		for (Annotation a : m.annotations) {
+			if (a instanceof EventListener) return true;
+		}
+		return false;
 	}
 
 	public void registerListener(Consumer<EventBase> listener, Class<? extends EventBase> eventType) {
